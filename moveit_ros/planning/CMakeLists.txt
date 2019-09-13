@@ -29,6 +29,8 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(Eigen3 REQUIRED)
+find_package(Boost REQUIRED system filesystem date_time thread)
+find_package(ompl REQUIRED)
 
 generate_dynamic_reconfigure_options(
   "planning_scene_monitor/cfg/PlanningSceneMonitorDynamicReconfigure.cfg"
@@ -73,6 +75,7 @@ catkin_package(
 )
 
 include_directories(${THIS_PACKAGE_INCLUDE_DIRS}
+                    ${OMPL_INCLUDE_DIRS}
                     ${catkin_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIRS}
 )

@@ -118,6 +118,15 @@ public:
     return check_solution_paths_;
   }
 
+  planning_interface::PlanningContextPtr getPlanningContext(
+                       const planning_scene::PlanningSceneConstPtr& planning_scene,
+                       const planning_interface::MotionPlanRequest& req) const;
+
+  bool generatePlan(const planning_scene::PlanningSceneConstPtr& planning_scene,
+                    const planning_interface::MotionPlanRequest& req,
+                    const planning_interface::PlanningContextPtr& context,
+                    planning_interface::MotionPlanResponse& res) const;
+
   /** \brief Call the motion planner plugin and the sequence of planning request adapters (if any).
       \param planning_scene The planning scene where motion planning is to be done
       \param req The request for motion planning

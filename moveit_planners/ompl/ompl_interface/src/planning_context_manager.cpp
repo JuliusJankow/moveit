@@ -55,6 +55,7 @@
 #include <ompl/geometric/planners/rrt/RRTstar.h>
 #include <ompl/geometric/planners/prm/PRM.h>
 #include <ompl/geometric/planners/prm/PRMstar.h>
+#include <ompl/geometric/planners/prm/PRMsep.h>
 #include <ompl/geometric/planners/fmt/FMT.h>
 #include <ompl/geometric/planners/fmt/BFMT.h>
 #include <ompl/geometric/planners/pdst/PDST.h>
@@ -170,6 +171,9 @@ void ompl_interface::PlanningContextManager::registerDefaultPlanners()
   registerPlannerAllocator(  //
       "geometric::PRMstar",  //
       std::bind(&allocatePlanner<og::PRMstar>, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+  registerPlannerAllocator(  //
+      "geometric::PRMsep",  //
+      std::bind(&allocatePlanner<og::PRMsep>, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
   registerPlannerAllocator(  //
       "geometric::FMT",      //
       std::bind(&allocatePlanner<og::FMT>, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));

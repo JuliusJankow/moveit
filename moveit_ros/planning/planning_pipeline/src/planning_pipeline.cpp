@@ -199,6 +199,106 @@ void planning_pipeline::PlanningPipeline::checkSolutionPaths(bool flag)
   check_solution_paths_ = flag;
 }
 
+planning_interface::PlanningContextPtr planning_pipeline::PlanningPipeline::getPlanningContext(
+                       const planning_scene::PlanningSceneConstPtr& planning_scene,
+                       const planning_interface::MotionPlanRequest& req) const
+{
+  planning_interface::MotionPlanResponse dummy;
+  planning_interface::PlanningContextPtr context;
+  
+  if (!planner_instance_)
+  {
+    ROS_ERROR("No planning plugin loaded. Cannot create planning context.");
+    return context;
+  }
+
+  try
+  {
+    context = planner_instance_->getPlanningContext(planning_scene, req, dummy.error_code_);
+  }
+  catch (std::exception& ex)
+  {
+    ROS_ERROR("Exception caught: '%s'", ex.what());
+  }
+
+  return context;
+}
+
+bool planning_pipeline::PlanningPipeline::generatePlan(const planning_scene::PlanningSceneConstPtr& planning_scene,
+                                                       const planning_interface::MotionPlanRequest& req,
+                                                       const planning_interface::PlanningContextPtr& context,
+                                                       planning_interface::MotionPlanResponse& res) const
+{
+  // broadcast the request we are about to work on, if needed
+  if (publish_received_requests_)
+    received_request_publisher_.publish(req);
+
+  if (!planner_instance_)
+  {
+    ROS_ERROR("No planning plugin loaded. Cannot plan.");
+    return false;
+  }
+
+  bool solved = false;
+  try
+  {
+    solved = context ? context->solve(res) : false;
+  }
+  catch (std::exception& ex)
+  {
+    ROS_ERROR("Exception caught: '%s'", ex.what());
+    return false;
+  }
+  bool valid = true;
+
+  if (solved && res.trajectory_)
+  {
+    std::size_t state_count = res.trajectory_->getWayPointCount();
+    ROS_DEBUG_STREAM("Motion planner reported a solution path with " << state_count << " states");
+    if (check_solution_paths_)
+    {
+      std::vector<std::size_t> index;
+      if (!planning_scene->isPathValid(*res.trajectory_, req.path_constraints, req.group_name, false, &index))
+      {
+        ROS_ERROR_STREAM("Completed listing of explanations for invalid states.");
+      }
+      else
+        ROS_DEBUG("Planned path was found to be valid when rechecked");
+    }
+  }
+
+  // display solution path if needed
+  if (display_computed_motion_plans_ && solved)
+  {
+    moveit_msgs::DisplayTrajectory disp;
+    disp.model_id = robot_model_->getName();
+    disp.trajectory.resize(1);
+    res.trajectory_->getRobotTrajectoryMsg(disp.trajectory[0]);
+    robot_state::robotStateToRobotStateMsg(res.trajectory_->getFirstWayPoint(), disp.trajectory_start);
+    display_path_publisher_.publish(disp);
+  }
+
+  if (!solved)
+  {
+    // This should alert the user if planning failed because of contradicting constraints.
+    // Could be checked more thoroughly, but it is probably not worth going to that length.
+    bool stacked_constraints = false;
+    if (req.path_constraints.position_constraints.size() > 1 || req.path_constraints.orientation_constraints.size() > 1)
+      stacked_constraints = true;
+    for (auto constraint : req.goal_constraints)
+    {
+      if (constraint.position_constraints.size() > 1 || constraint.orientation_constraints.size() > 1)
+        stacked_constraints = true;
+    }
+    if (stacked_constraints)
+      ROS_WARN("More than one constraint is set. If your move_group does not have multiple end effectors/arms, this is "
+               "unusual. Are you using a move_group_interface and forgetting to call clearPoseTargets() or "
+               "equivalent?");
+  }
+
+  return solved && valid;
+}
+
 bool planning_pipeline::PlanningPipeline::generatePlan(const planning_scene::PlanningSceneConstPtr& planning_scene,
                                                        const planning_interface::MotionPlanRequest& req,
                                                        planning_interface::MotionPlanResponse& res) const

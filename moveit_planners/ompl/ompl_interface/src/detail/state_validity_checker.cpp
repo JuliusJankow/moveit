@@ -34,6 +34,7 @@
 
 /* Author: Ioan Sucan */
 
+#include <moveit/collision_detection/collision_env.h>
 #include <moveit/ompl_interface/detail/state_validity_checker.h>
 #include <moveit/ompl_interface/model_based_planning_context.h>
 #include <moveit/profiler/profiler.h>
@@ -103,11 +104,85 @@ double ompl_interface::StateValidityChecker::clearance(const ompl::base::State* 
 {
   robot_state::RobotState* robot_state = tss_.getStateStorage();
   planning_context_->getOMPLStateSpace()->copyToRobotState(*robot_state, state);
+  robot_state->updateCollisionBodyTransforms();
+
+  // get the collision environment handle which is a wrapper for fcl
+  const collision_detection::CollisionEnvConstPtr collision_env = 
+    planning_context_->getPlanningScene()->getCollisionEnvUnpadded();
+
+  collision_detection::DistanceRequest req;
+  req.group_name = planning_context_->getGroupName();
+  req.acm = &(planning_context_->getPlanningScene()->getAllowedCollisionMatrix());
+  req.enableGroup(collision_env->getRobotModel());
+  req.enable_nearest_points = true;
+  req.compute_gradient = true;
+  req.type = collision_detection::DistanceRequestType::SINGLE; // Find the global minimum distance for each pair
+
+  collision_detection::DistanceResult res;
+  collision_env->distanceRobot(req, res, *robot_state);
+
+  if (res.collision)
+    return 0.0;
+
+  if (res.minimum_distance.distance > 0.2)
+    return std::numeric_limits<double>::infinity();
+
+  double clearance = std::numeric_limits<double>::infinity();
+  const robot_model::JointModelGroup* group = robot_state->getJointModelGroup(planning_context_->getGroupName());
+
+  /*for (auto const& distance_map : res.distances) {
+    if (distance_map.second.size() == 0)
+      continue;*/
+
+    const collision_detection::DistanceResultsData& distance_data = res.minimum_distance; // distance_map.second[0];
+    double d = distance_data.distance;
+    Eigen::Vector3d p1; // point on robot
+    Eigen::Vector3d p2; // point on obstacle
+    const robot_model::LinkModel* link; // link model of robot link that is colliding
+    if (distance_data.body_types[0] == collision_detection::BodyType::WORLD_OBJECT) {
+      p1 = distance_data.nearest_points[1]; 
+      p2 = distance_data.nearest_points[0];
+      link = robot_state->getLinkModel(distance_data.link_names[1]);
+    } else if (distance_data.body_types[1] == collision_detection::BodyType::WORLD_OBJECT) {
+      p1 = distance_data.nearest_points[0];
+      p2 = distance_data.nearest_points[1];
+      link = robot_state->getLinkModel(distance_data.link_names[0]);
+    } else {
+      ROS_WARN_NAMED("state_validity_checker", "Both distance objects are not a WORLD_OBJECT");
+    }
+
+    Eigen::Vector3d normal = distance_data.normal;
+
+    // vector from link 1 origin to p1
+    Eigen::Vector3d p1_rel = p1 - robot_state->getGlobalLinkTransform(link).translation();
+
+    Eigen::MatrixXd J_p1;
+    robot_state->getJacobian(group, link, p1_rel, J_p1);
+
+    Eigen::MatrixXd J_p1_trans = J_p1.topRows(3); // extract only translational part
+
+    double norm_dd_dq = (normal.transpose() * J_p1_trans).norm();
+
+    if (norm_dd_dq < 0.001)
+      return std::numeric_limits<double>::infinity();
+
+    double radius_q_free = d / norm_dd_dq;
+
+    clearance = radius_q_free < clearance ? radius_q_free : clearance;
+  //}
+
+  return clearance;
+}
+
+/*double ompl_interface::StateValidityChecker::clearance(const ompl::base::State* state) const
+{
+  robot_state::RobotState* robot_state = tss_.getStateStorage();
+  planning_context_->getOMPLStateSpace()->copyToRobotState(*robot_state, state);
 
   collision_detection::CollisionResult res;
   planning_context_->getPlanningScene()->checkCollision(collision_request_with_distance_, res, *robot_state);
   return res.collision ? 0.0 : (res.distance < 0.0 ? std::numeric_limits<double>::infinity() : res.distance);
-}
+}*/
 
 bool ompl_interface::StateValidityChecker::isValidWithoutCache(const ompl::base::State* state, bool verbose) const
 {

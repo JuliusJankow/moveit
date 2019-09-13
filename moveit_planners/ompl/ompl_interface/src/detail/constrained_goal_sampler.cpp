@@ -85,13 +85,16 @@ bool ompl_interface::ConstrainedGoalSampler::stateValidityCallback(ob::State* ne
 bool ompl_interface::ConstrainedGoalSampler::sampleUsingConstraintSampler(const ob::GoalLazySamples* gls,
                                                                           ob::State* new_goal)
 {
+  if (!default_sampler_)
+    default_sampler_ = si_->allocStateSampler();
+
   //  moveit::Profiler::ScopedBlock sblock("ConstrainedGoalSampler::sampleUsingConstraintSampler");
 
   unsigned int max_attempts = planning_context_->getMaximumGoalSamplingAttempts();
   unsigned int attempts_so_far = gls->samplingAttemptsCount();
 
   // terminate after too many attempts
-  if (attempts_so_far >= max_attempts)
+  /*if (attempts_so_far >= max_attempts)
     return false;
 
   // terminate after a maximum number of samples
@@ -100,7 +103,7 @@ bool ompl_interface::ConstrainedGoalSampler::sampleUsingConstraintSampler(const 
 
   // terminate the sampling thread when a solution has been found
   if (planning_context_->getOMPLSimpleSetup()->getProblemDefinition()->hasSolution())
-    return false;
+    return false;*/
 
   unsigned int max_attempts_div2 = max_attempts / 2;
   for (unsigned int a = gls->samplingAttemptsCount(); a < max_attempts && gls->isSampling(); ++a)
@@ -123,6 +126,10 @@ bool ompl_interface::ConstrainedGoalSampler::sampleUsingConstraintSampler(const 
                     std::placeholders::_3,  // double* of joint positions
                     verbose);
       constraint_sampler_->setGroupStateValidityCallback(gsvcf);
+
+      // randomly seed IK solution to get different samples on goal manifold
+      default_sampler_->sampleUniform(new_goal);
+      planning_context_->getOMPLStateSpace()->copyToRobotState(work_state_, new_goal);
 
       if (constraint_sampler_->project(work_state_, planning_context_->getMaximumStateSamplingAttempts()))
       {
@@ -157,4 +164,11 @@ bool ompl_interface::ConstrainedGoalSampler::sampleUsingConstraintSampler(const 
     }
   }
   return false;
+}
+
+bool ompl_interface::ConstrainedGoalSampler::isSatisfied (const ompl::base::State* state) const
+{
+  robot_state::RobotState robot_state(work_state_);
+  planning_context_->getOMPLStateSpace()->copyToRobotState(robot_state, state);
+  return kinematic_constraint_set_->decide(robot_state, false).satisfied;
 }

@@ -42,6 +42,7 @@
 #include <moveit/ompl_interface/detail/constrained_goal_sampler.h>
 #include <moveit/ompl_interface/detail/goal_union.h>
 #include <moveit/ompl_interface/detail/projection_evaluators.h>
+#include <moveit/ompl_interface/detail/StateCostIntegralObjectiveCustom.h>
 #include <moveit/ompl_interface/constraints_library.h>
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/profiler/profiler.h>
@@ -59,8 +60,10 @@
 #include "ompl/base/objectives/StateCostIntegralObjective.h"
 #include "ompl/base/objectives/MaximizeMinClearanceObjective.h"
 
+#include "ompl/geometric/PathSimplifierOpt.h"
+
 ompl_interface::ModelBasedPlanningContext::ModelBasedPlanningContext(const std::string& name,
-                                                                     const ModelBasedPlanningContextSpecification& spec)
+                                                                     const ModelBasedPlanningContextSpecification& spec) // planner name must be specified in spec
   : planning_interface::PlanningContext(name, spec.state_space_->getJointModelGroup()->getName())
   , spec_(spec)
   , complete_initial_robot_state_(spec.state_space_->getRobotModel())
@@ -312,6 +315,7 @@ void ompl_interface::ModelBasedPlanningContext::useConfig()
     objective.reset(new ompl::base::PathLengthOptimizationObjective(ompl_simple_setup_->getSpaceInformation()));
   }
 
+  objective.reset(new ompl_interface::StateCostIntegralObjectiveCustom(this, ompl_simple_setup_->getSpaceInformation(), true));
   ompl_simple_setup_->setOptimizationObjective(objective);
 
   // remove the 'type' parameter; the rest are parameters for the planner itself
@@ -360,7 +364,18 @@ void ompl_interface::ModelBasedPlanningContext::setPlanningVolume(const moveit_m
 
 void ompl_interface::ModelBasedPlanningContext::simplifySolution(double timeout)
 {
-  ompl_simple_setup_->simplifySolution(timeout);
+
+  // ompl_simple_setup_->simplifySolution(timeout);
+
+  if (ompl_simple_setup_->haveSolutionPath())
+  {
+    og::PathSimplifierOpt ps(ompl_simple_setup_->getSpaceInformation(), ompl_simple_setup_->getGoal(), ompl_simple_setup_->getOptimizationObjective());
+    og::PathGeometric& path = ompl_simple_setup_->getSolutionPath();
+    std::size_t numStates = path.getStateCount();
+    ps.reduceVertices(path);
+    ROS_INFO("Context: Path simplification changed from %d to %d states", numStates, path.getStateCount());
+  }
+
   last_simplify_time_ = ompl_simple_setup_->getLastSimplificationTime();
 }
 
@@ -448,6 +463,10 @@ void ompl_interface::ModelBasedPlanningContext::setCompleteInitialState(
 {
   complete_initial_robot_state_ = complete_initial_robot_state;
   complete_initial_robot_state_.update();
+
+  ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
+  spec_.state_space_->copyToOMPLState(ompl_start_state.get(), complete_initial_robot_state_);
+  ompl_simple_setup_->setStartState(ompl_start_state);
 }
 
 void ompl_interface::ModelBasedPlanningContext::clear()
@@ -572,6 +591,12 @@ bool ompl_interface::ModelBasedPlanningContext::solve(planning_interface::Motion
       simplifySolution(request_.allowed_planning_time - ptime);
       ptime += getLastSimplifyTime();
     }
+    ompl::base::OptimizationObjectivePtr objective;
+    objective.reset(new ompl_interface::StateCostIntegralObjectiveCustom(this, ompl_simple_setup_->getSpaceInformation(), true));
+    ob::Cost pathCost = ompl_simple_setup_->getSolutionPath().cost(objective);
+    ROS_INFO_STREAM("Context: Final path has length " << 
+                    getOMPLSimpleSetup()->getSolutionPath().length() << " and cost " << pathCost.value());
+
     interpolateSolution();
 
     // fill the response
@@ -627,6 +652,7 @@ bool ompl_interface::ModelBasedPlanningContext::solve(planning_interface::Motion
     // fill the response
     ROS_DEBUG_NAMED("model_based_planning_context", "%s: Returning successful solution with %lu states",
                     getName().c_str(), getOMPLSimpleSetup()->getSolutionPath().getStateCount());
+    res.error_code_.val = res.error_code_.SUCCESS;
     return true;
   }
   else

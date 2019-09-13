@@ -85,6 +85,7 @@ protected:
   collision_detection::CollisionRequest collision_request_with_distance_verbose_;
 
   collision_detection::CollisionRequest collision_request_with_cost_;
+  collision_detection::CollisionRequest collision_request_with_contact_;
   bool verbose_;
 };
 }

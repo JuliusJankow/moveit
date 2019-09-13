@@ -55,6 +55,8 @@ public:
   ConstrainedGoalSampler(const ModelBasedPlanningContext* pc, kinematic_constraints::KinematicConstraintSetPtr ks,
                          constraint_samplers::ConstraintSamplerPtr cs = constraint_samplers::ConstraintSamplerPtr());
 
+  bool isSatisfied (const ompl::base::State* state) const override;
+
 private:
   bool sampleUsingConstraintSampler(const ompl::base::GoalLazySamples* gls, ompl::base::State* new_goal);
   bool stateValidityCallback(ompl::base::State* new_goal, robot_state::RobotState const* state,

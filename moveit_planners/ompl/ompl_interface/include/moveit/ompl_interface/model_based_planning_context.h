@@ -88,6 +88,8 @@ public:
   void clear() override;
   bool terminate() override;
 
+  // void setPlannerData(ob::PlannerData* pd);
+
   const ModelBasedPlanningContextSpecification& getSpecification() const
   {
     return spec_;
