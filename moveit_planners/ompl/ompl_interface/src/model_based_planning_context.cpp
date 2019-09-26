@@ -597,7 +597,7 @@ bool ompl_interface::ModelBasedPlanningContext::solve(planning_interface::Motion
     ROS_INFO_STREAM("Context: Final path has length " << 
                     getOMPLSimpleSetup()->getSolutionPath().length() << " and cost " << pathCost.value());
 
-    interpolateSolution();
+    //interpolateSolution();
 
     // fill the response
     ROS_DEBUG_NAMED("model_based_planning_context", "%s: Returning successful solution with %lu states",
@@ -641,13 +641,13 @@ bool ompl_interface::ModelBasedPlanningContext::solve(planning_interface::Motion
       getSolutionPath(*res.trajectory_.back());
     }
 
-    ompl::time::point start_interpolate = ompl::time::now();
+    /*ompl::time::point start_interpolate = ompl::time::now();
     interpolateSolution();
     res.processing_time_.push_back(ompl::time::seconds(ompl::time::now() - start_interpolate));
     res.description_.emplace_back("interpolate");
     res.trajectory_.resize(res.trajectory_.size() + 1);
     res.trajectory_.back().reset(new robot_trajectory::RobotTrajectory(getRobotModel(), getGroupName()));
-    getSolutionPath(*res.trajectory_.back());
+    getSolutionPath(*res.trajectory_.back());*/
 
     // fill the response
     ROS_DEBUG_NAMED("model_based_planning_context", "%s: Returning successful solution with %lu states",

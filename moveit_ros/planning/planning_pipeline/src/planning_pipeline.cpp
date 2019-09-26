@@ -268,7 +268,7 @@ bool planning_pipeline::PlanningPipeline::generatePlan(const planning_scene::Pla
   }
 
   // display solution path if needed
-  if (display_computed_motion_plans_ && solved)
+  /*if (display_computed_motion_plans_ && solved)
   {
     moveit_msgs::DisplayTrajectory disp;
     disp.model_id = robot_model_->getName();
@@ -276,7 +276,7 @@ bool planning_pipeline::PlanningPipeline::generatePlan(const planning_scene::Pla
     res.trajectory_->getRobotTrajectoryMsg(disp.trajectory[0]);
     robot_state::robotStateToRobotStateMsg(res.trajectory_->getFirstWayPoint(), disp.trajectory_start);
     display_path_publisher_.publish(disp);
-  }
+  }*/
 
   if (!solved)
   {

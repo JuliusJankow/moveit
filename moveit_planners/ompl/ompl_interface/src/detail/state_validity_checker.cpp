@@ -100,6 +100,162 @@ double ompl_interface::StateValidityChecker::cost(const ompl::base::State* state
   return cost;
 }
 
+bool ompl_interface::StateValidityChecker::isValid(const ompl::base::State* state, double& dist, ompl::base::State *validState, bool &new_state) const
+{
+  static Eigen::VectorXd q_new(7);
+  static Eigen::MatrixXd J_p_new_trans(3,7);
+
+  robot_state::RobotState* robot_state = tss_.getStateStorage();
+  if (new_state) {
+    planning_context_->getOMPLStateSpace()->copyToRobotState(*robot_state, state);
+    robot_state->updateCollisionBodyTransforms();
+    robot_state->update();
+
+    // get the collision environment handle which is a wrapper for fcl
+    const collision_detection::CollisionEnvConstPtr collision_env = 
+    planning_context_->getPlanningScene()->getCollisionEnvUnpadded();
+
+    collision_detection::DistanceRequest req;
+    req.group_name = planning_context_->getGroupName();
+    req.acm = &(planning_context_->getPlanningScene()->getAllowedCollisionMatrix());
+    req.enableGroup(collision_env->getRobotModel());
+    req.enable_nearest_points = true;
+    req.compute_gradient = true;
+    req.type = collision_detection::DistanceRequestType::SINGLE; // Find the global minimum distance for each pair
+
+    collision_detection::DistanceResult res;
+    collision_env->distanceRobot(req, res, *robot_state);
+
+    if (res.collision) {
+      dist = 0.0;
+      return false;
+    }
+
+    const robot_model::JointModelGroup* group = robot_state->getJointModelGroup(planning_context_->getGroupName());
+
+    const collision_detection::DistanceResultsData& distance_data = res.minimum_distance; // distance_map.second[0];
+    dist = distance_data.distance;
+    Eigen::Vector3d p1; // point on robot
+    Eigen::Vector3d p2; // point on obstacle
+    const robot_model::LinkModel* link; // link model of robot link that is colliding
+    if (distance_data.body_types[0] == collision_detection::BodyType::WORLD_OBJECT) {
+      p1 = distance_data.nearest_points[1]; 
+      p2 = distance_data.nearest_points[0];
+      link = robot_state->getLinkModel(distance_data.link_names[1]);
+    } else if (distance_data.body_types[1] == collision_detection::BodyType::WORLD_OBJECT) {
+      p1 = distance_data.nearest_points[0];
+      p2 = distance_data.nearest_points[1];
+      link = robot_state->getLinkModel(distance_data.link_names[0]);
+    } else {
+      ROS_WARN_NAMED("state_validity_checker", "Both distance objects are not a WORLD_OBJECT");
+    }
+
+    // vector from link 1 origin to p1
+    Eigen::Vector3d p1_rel = p1 - robot_state->getGlobalLinkTransform(link).translation();
+
+    Eigen::MatrixXd J_p1;
+    robot_state->getJacobian(group, link, p1_rel, J_p1);
+
+    for (size_t j=0; j<7; j++) {
+      q_new(j) = robot_state->getVariablePosition(j);
+    }
+    J_p_new_trans = J_p1.topRows(3); // extract only translational part
+  }
+
+  planning_context_->getOMPLStateSpace()->copyToRobotState(*robot_state, validState);
+
+  Eigen::VectorXd q(7);
+  Eigen::VectorXd delta_q_max(7);
+  delta_q_max << 0.3, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8;
+  for (size_t j=0; j<7; j++) {
+    q(j) = robot_state->getVariablePosition(j);
+    if (fabs(q(j) - q_new(j)) > delta_q_max(j)) {
+      return true;
+    }
+  }
+
+  Eigen::VectorXd delta_p = J_p_new_trans * (q - q_new);
+
+  double sample_clearance = 0.8*dist;
+  return delta_p.norm() > sample_clearance;
+}
+
+/*double ompl_interface::StateValidityChecker::cost(const ompl::base::State* state) const
+{
+  robot_state::RobotState* robot_state = tss_.getStateStorage();
+  planning_context_->getOMPLStateSpace()->copyToRobotState(*robot_state, state);
+
+  Eigen::VectorXd q = Eigen::VectorXd::Zero(7);
+  for (size_t j=0; j<7; j++) {
+    q(j) = robot_state->getVariablePosition(j);
+  }
+
+  Eigen::VectorXd delta_p = J_p_new_trans * (q - q_new);
+
+  return delta_p.norm();
+}*/
+
+/*double ompl_interface::StateValidityChecker::clearance(const ompl::base::State* state) const
+{
+  robot_state::RobotState* robot_state = tss_.getStateStorage();
+  planning_context_->getOMPLStateSpace()->copyToRobotState(*robot_state, state);
+  robot_state->updateCollisionBodyTransforms();
+
+  // get the collision environment handle which is a wrapper for fcl
+  const collision_detection::CollisionEnvConstPtr collision_env = 
+    planning_context_->getPlanningScene()->getCollisionEnvUnpadded();
+
+  collision_detection::DistanceRequest req;
+  req.group_name = planning_context_->getGroupName();
+  req.acm = &(planning_context_->getPlanningScene()->getAllowedCollisionMatrix());
+  req.enableGroup(collision_env->getRobotModel());
+  req.enable_nearest_points = true;
+  req.compute_gradient = true;
+  req.type = collision_detection::DistanceRequestType::SINGLE; // Find the global minimum distance for each pair
+
+  collision_detection::DistanceResult res;
+  collision_env->distanceRobot(req, res, *robot_state);
+
+  if (res.collision)
+    return 0.0;
+
+  if (res.minimum_distance.distance > 0.2)
+    return std::numeric_limits<double>::infinity();
+
+  const robot_model::JointModelGroup* group = robot_state->getJointModelGroup(planning_context_->getGroupName());
+
+  const collision_detection::DistanceResultsData& distance_data = res.minimum_distance; // distance_map.second[0];
+  double d = distance_data.distance;
+  Eigen::Vector3d p1; // point on robot
+  Eigen::Vector3d p2; // point on obstacle
+  const robot_model::LinkModel* link; // link model of robot link that is colliding
+  if (distance_data.body_types[0] == collision_detection::BodyType::WORLD_OBJECT) {
+    p1 = distance_data.nearest_points[1]; 
+    p2 = distance_data.nearest_points[0];
+    link = robot_state->getLinkModel(distance_data.link_names[1]);
+  } else if (distance_data.body_types[1] == collision_detection::BodyType::WORLD_OBJECT) {
+    p1 = distance_data.nearest_points[0];
+    p2 = distance_data.nearest_points[1];
+    link = robot_state->getLinkModel(distance_data.link_names[0]);
+  } else {
+    ROS_WARN_NAMED("state_validity_checker", "Both distance objects are not a WORLD_OBJECT");
+  }
+
+  // vector from link 1 origin to p1
+  Eigen::Vector3d p1_rel = p1 - robot_state->getGlobalLinkTransform(link).translation();
+
+  Eigen::MatrixXd J_p1;
+  robot_state->getJacobian(group, link, p1_rel, J_p1);
+
+  q_new = Eigen::VectorXd::Zero(7);
+  for (size_t j=0; j<7; j++) {
+    q_new(j) = robot_state->getVariablePosition(j);
+  }
+  J_p_new_trans = J_p1.topRows(3); // extract only translational part
+
+  return d;
+}*/
+
 double ompl_interface::StateValidityChecker::clearance(const ompl::base::State* state) const
 {
   robot_state::RobotState* robot_state = tss_.getStateStorage();
@@ -130,9 +286,9 @@ double ompl_interface::StateValidityChecker::clearance(const ompl::base::State* 
   double clearance = std::numeric_limits<double>::infinity();
   const robot_model::JointModelGroup* group = robot_state->getJointModelGroup(planning_context_->getGroupName());
 
-  /*for (auto const& distance_map : res.distances) {
-    if (distance_map.second.size() == 0)
-      continue;*/
+  //for (auto const& distance_map : res.distances) {
+  //  if (distance_map.second.size() == 0)
+  //    continue;
 
     const collision_detection::DistanceResultsData& distance_data = res.minimum_distance; // distance_map.second[0];
     double d = distance_data.distance;

@@ -61,6 +61,9 @@ public:
     return isValid(state, dist, verbose_);
   }
 
+  // custom function for sample rejection
+  bool isValid(const ompl::base::State* state, double& dist, ompl::base::State *validState, bool &validStateAvailable) const override;
+
   bool isValid(const ompl::base::State* state, bool verbose) const;
   bool isValid(const ompl::base::State* state, double& dist, bool verbose) const;
 
@@ -87,5 +90,9 @@ protected:
   collision_detection::CollisionRequest collision_request_with_cost_;
   collision_detection::CollisionRequest collision_request_with_contact_;
   bool verbose_;
+
+  // custom variables stored for sample rejection method
+  // Eigen::MatrixXd J_p_new_trans;
+  // Eigen::VectorXd q_new;
 };
 }
