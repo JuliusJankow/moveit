@@ -127,8 +127,14 @@ bool ompl_interface::ConstrainedGoalSampler::sampleUsingConstraintSampler(const 
                     verbose);
       constraint_sampler_->setGroupStateValidityCallback(gsvcf);
 
-      // randomly seed IK solution to get different samples on goal manifold
-      default_sampler_->sampleUniform(new_goal);
+      if (attempts_so_far == 0) {
+        const robot_state::RobotState& initial_state = planning_context_->getCompleteInitialRobotState();
+        planning_context_->getOMPLStateSpace()->copyToOMPLState(new_goal, initial_state);
+        std::cout << " joooo " << std::endl;
+      } else {
+        // randomly seed IK solution to get different samples on goal manifold
+        default_sampler_->sampleUniform(new_goal);
+      }
       planning_context_->getOMPLStateSpace()->copyToRobotState(work_state_, new_goal);
 
       if (constraint_sampler_->project(work_state_, planning_context_->getMaximumStateSamplingAttempts()))

@@ -50,8 +50,20 @@ public:
     */
     ompl::base::Cost motionCost(const ompl::base::State *s1, const ompl::base::State *s2) const override;
 
+    ompl::base::Cost motionCostHeuristic(const ompl::base::State *s1, const ompl::base::State *s2) const override;
+
     double getWorkSpaceDistance(const ompl::base::State *s1, const ompl::base::State *s2) const;
 private:
+    double segmentCostDefault(const ompl::base::State *s1, const ompl::base::State *s2) const;
+    double segmentCostGravity(const ompl::base::State *s1, const ompl::base::State *s2) const;
+    double segmentCostSafetyDirection(const ompl::base::State *s1, const ompl::base::State *s2) const;
+    double segmentCostQGravity(const ompl::base::State *s1, const ompl::base::State *s2) const;
+    double segmentCostXSafetyDirection(const ompl::base::State *s1, const ompl::base::State *s2) const;
+    double segmentCostQDefault(const ompl::base::State *s1, const ompl::base::State *s2) const;
+    double segmentCostXDefault(const ompl::base::State *s1, const ompl::base::State *s2) const;
+
+    Eigen::VectorXd getGravity(const Eigen::VectorXd& q) const;
+
     robot_state::RobotState work_state_;
     const ModelBasedPlanningContext* planning_context_;
 };
