@@ -43,7 +43,7 @@ double ompl_interface::StateCostIntegralObjectiveCustom::segmentCostXDefault(con
 
 double ompl_interface::StateCostIntegralObjectiveCustom::segmentCostXSafetyDirection(const ompl::base::State *s1, const ompl::base::State *s2) const
 {
-    Eigen::Vector3d e_danger(0.0, 0.0, 1.0);
+    Eigen::Vector3d e_tool(0.0, 0.0, 1.0);
     Eigen::Vector3d zero_v(0.0,0.0,0.0);
 
     std::string link_name = "panda_link8";
@@ -53,6 +53,7 @@ double ompl_interface::StateCostIntegralObjectiveCustom::segmentCostXSafetyDirec
 
     planning_context_->getOMPLStateSpace()->copyToRobotState(robot_state, s1);
     robot_state.updateLinkTransforms();
+    Eigen::Vector3d x_EE_1 = robot_state.getGlobalLinkTransform(link_name).translation();
     Eigen::Matrix3d R_EE_1 = robot_state.getGlobalLinkTransform(link_name).rotation();
     Eigen::MatrixXd J_EE_1;
     robot_state.getJacobian(group, link, zero_v, J_EE_1);
@@ -63,6 +64,7 @@ double ompl_interface::StateCostIntegralObjectiveCustom::segmentCostXSafetyDirec
 
     planning_context_->getOMPLStateSpace()->copyToRobotState(robot_state, s2);
     robot_state.updateLinkTransforms();
+    Eigen::Vector3d x_EE_2 = robot_state.getGlobalLinkTransform(link_name).translation();
     Eigen::Matrix3d R_EE_2 = robot_state.getGlobalLinkTransform(link_name).rotation();
     Eigen::MatrixXd J_EE_2;
     robot_state.getJacobian(group, link, zero_v, J_EE_2);
@@ -71,13 +73,20 @@ double ompl_interface::StateCostIntegralObjectiveCustom::segmentCostXSafetyDirec
         q2(j) = robot_state.getVariablePosition(j);
     }
     
-    Eigen::Vector3d e_x_motion_1 = (J_EE_1 * (q2 - q1)).normalized();
-    Eigen::Vector3d e_x_motion_2 = (J_EE_2 * (q2 - q1)).normalized();
+    /*Eigen::Vector3d e_x_motion_1 = (J_EE_1 * (q2 - q1)).normalized();
+    Eigen::Vector3d e_x_motion_2 = (J_EE_2 * (q2 - q1)).normalized();*/
 
-    Eigen::Vector3d e_x_danger_1 = R_EE_1 * e_danger;
-    Eigen::Vector3d e_x_danger_2 = R_EE_2 * e_danger;
+    /*Eigen::Vector3d e_x_danger_1 = R_EE_1 * e_danger;
+    Eigen::Vector3d e_x_danger_2 = R_EE_2 * e_danger;*/
 
-    return 15*(3.0 + e_x_motion_1.dot(e_x_danger_1) + e_x_motion_2.dot(e_x_danger_2));
+    Eigen::Vector3d e_tool_actual_1 = R_EE_1 * e_tool;
+    Eigen::Vector3d e_tool_actual_2 = R_EE_2 * e_tool;
+
+    Eigen::Vector3d e_tool_danger_1 = x_EE_1.normalized();
+    Eigen::Vector3d e_tool_danger_2 = x_EE_2.normalized();
+
+    //return 15*(3.0 + e_x_motion_1.dot(e_x_danger_1) + e_x_motion_2.dot(e_x_danger_2));
+    return 15*(3.0 + e_tool_actual_1.dot(e_tool_danger_1) + e_tool_actual_2.dot(e_tool_danger_2)); // result is in between [1, 75]
 }
 
 double ompl_interface::StateCostIntegralObjectiveCustom::segmentCostDefault(const ompl::base::State *s1, const ompl::base::State *s2) const
@@ -127,7 +136,7 @@ ompl::base::Cost ompl_interface::StateCostIntegralObjectiveCustom::motionCost(co
         si_->freeState(test1);
     }*/
 
-    return ompl::base::Cost(segmentCostDefault(s1, s2));
+    return ompl::base::Cost(segmentCostSafetyDirection(s1, s2));
 }
 
 ompl::base::Cost ompl_interface::StateCostIntegralObjectiveCustom::motionCostHeuristic(const ompl::base::State *s1, const ompl::base::State *s2) const

@@ -130,7 +130,6 @@ bool ompl_interface::ConstrainedGoalSampler::sampleUsingConstraintSampler(const 
       if (attempts_so_far == 0) {
         const robot_state::RobotState& initial_state = planning_context_->getCompleteInitialRobotState();
         planning_context_->getOMPLStateSpace()->copyToOMPLState(new_goal, initial_state);
-        std::cout << " joooo " << std::endl;
       } else {
         // randomly seed IK solution to get different samples on goal manifold
         default_sampler_->sampleUniform(new_goal);
