@@ -104,8 +104,10 @@ bool ompl_interface::StateValidityChecker::isValid(const ompl::base::State* stat
 {
   static Eigen::VectorXd q_new(7);
   static Eigen::MatrixXd J_p_new_trans(3,7);
+  static std::string collision_link_name;
 
   robot_state::RobotState* robot_state = tss_.getStateStorage();
+  const robot_model::JointModelGroup* group = robot_state->getJointModelGroup(planning_context_->getGroupName());
   if (new_state) {
     planning_context_->getOMPLStateSpace()->copyToRobotState(*robot_state, state);
     robot_state->updateCollisionBodyTransforms();
@@ -131,24 +133,23 @@ bool ompl_interface::StateValidityChecker::isValid(const ompl::base::State* stat
       return false;
     }
 
-    const robot_model::JointModelGroup* group = robot_state->getJointModelGroup(planning_context_->getGroupName());
-
     const collision_detection::DistanceResultsData& distance_data = res.minimum_distance; // distance_map.second[0];
     dist = distance_data.distance;
     Eigen::Vector3d p1; // point on robot
     Eigen::Vector3d p2; // point on obstacle
-    const robot_model::LinkModel* link; // link model of robot link that is colliding
     if (distance_data.body_types[0] == collision_detection::BodyType::WORLD_OBJECT) {
       p1 = distance_data.nearest_points[1]; 
       p2 = distance_data.nearest_points[0];
-      link = robot_state->getLinkModel(distance_data.link_names[1]);
+      collision_link_name = distance_data.link_names[1];
     } else if (distance_data.body_types[1] == collision_detection::BodyType::WORLD_OBJECT) {
       p1 = distance_data.nearest_points[0];
       p2 = distance_data.nearest_points[1];
-      link = robot_state->getLinkModel(distance_data.link_names[0]);
+      collision_link_name = distance_data.link_names[0];
     } else {
       ROS_WARN_NAMED("state_validity_checker", "Both distance objects are not a WORLD_OBJECT");
     }
+
+    const robot_model::LinkModel* link = robot_state->getLinkModel(collision_link_name);
 
     // vector from link 1 origin to p1
     Eigen::Vector3d p1_rel = p1 - robot_state->getGlobalLinkTransform(link).translation();
@@ -156,23 +157,32 @@ bool ompl_interface::StateValidityChecker::isValid(const ompl::base::State* stat
     Eigen::MatrixXd J_p1;
     robot_state->getJacobian(group, link, p1_rel, J_p1);
 
+    std::vector<double> joint_values;
+    robot_state->copyJointGroupPositions(group, joint_values);
+
     for (size_t j=0; j<7; j++) {
-      q_new(j) = robot_state->getVariablePosition(j);
+      q_new(j) = joint_values[j];
     }
     J_p_new_trans = J_p1.topRows(3); // extract only translational part
   }
 
   planning_context_->getOMPLStateSpace()->copyToRobotState(*robot_state, validState);
+  std::vector<double> joint_values;
+  robot_state->copyJointGroupPositions(group, joint_values);
 
   Eigen::VectorXd q(7);
   Eigen::VectorXd delta_q_max(7);
-  delta_q_max << 0.3, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8;
+  delta_q_max << 0.6, 0.6, 0.8, 0.8, 0.9, 1.0, 1.2; // 0.3, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8;
   for (size_t j=0; j<7; j++) {
-    q(j) = robot_state->getVariablePosition(j);
+    q(j) = joint_values[j];
     if (fabs(q(j) - q_new(j)) > delta_q_max(j)) {
       return true;
     }
   }
+
+  /*if (dist > 0.10) {
+    return false;
+  }*/
 
   Eigen::VectorXd delta_p = J_p_new_trans * (q - q_new);
 

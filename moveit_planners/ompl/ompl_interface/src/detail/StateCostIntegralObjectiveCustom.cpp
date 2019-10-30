@@ -112,11 +112,13 @@ double ompl_interface::StateCostIntegralObjectiveCustom::segmentCostGravity(cons
 
 ompl::base::Cost ompl_interface::StateCostIntegralObjectiveCustom::motionCost(const ompl::base::State *s1, const ompl::base::State *s2) const
 {
-    /*if (interpolateMotionCost_)
+    if (interpolateMotionCost_)
     {
-        ompl::base::Cost totalCost = ompl::base::Cost(0.0); // this->identityCost();
+        ompl::base::Cost totalCost = ompl::base::Cost(0.0);
 
-        int nd = si_->getStateSpace()->validSegmentCount(s1, s2);
+        double resolution = 0.1;
+        double distance = si_->distance(s1, s2);
+        int nd = (distance / resolution);
 
         ompl::base::State *test1 = si_->cloneState(s1);
         if (nd > 1)
@@ -125,7 +127,7 @@ ompl::base::Cost ompl_interface::StateCostIntegralObjectiveCustom::motionCost(co
             for (int j = 1; j <= nd; ++j)
             {
                 si_->getStateSpace()->interpolate(s1, s2, (double)j / (double)nd, test2);
-                totalCost = ompl::base::Cost(totalCost.value() + segmentCost(test1, test2));
+                totalCost = ompl::base::Cost(totalCost.value() + segmentCostDefault(test1, test2));
                 std::swap(test1, test2);
             }
             si_->freeState(test2);
@@ -134,9 +136,9 @@ ompl::base::Cost ompl_interface::StateCostIntegralObjectiveCustom::motionCost(co
             return totalCost;
         }
         si_->freeState(test1);
-    }*/
+    }
 
-    return ompl::base::Cost(segmentCostSafetyDirection(s1, s2));
+    return ompl::base::Cost(segmentCostDefault(s1, s2));
 }
 
 ompl::base::Cost ompl_interface::StateCostIntegralObjectiveCustom::motionCostHeuristic(const ompl::base::State *s1, const ompl::base::State *s2) const
